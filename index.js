@@ -34,22 +34,44 @@ var M = function ( _db_name, _server, _port ) {
     var _db = new Db( _db_name, new mongodb.Server( _server, 27017 ))
         ,pDb = a2p( _db.open, _db )
         ,cache = {}
-        ,Collection = function ( coll ) {
-            this.coll = cache[ coll ] = pDb.then( function( db ) {
-                return a2p( db.collection, db, coll );
+        ,Collection = function ( _coll ) {
+            this.coll = cache[ _coll ] || (cache[ _coll ] = pDb.then( function( db ) {
+                return a2p( db.collection, db, _coll );
+            }));
+            this.counter = pDb.then( function ( db ) {
+                return a2p( db.collection, db, 'counter').then( function ( coll ) {
+                    return a2p( coll.findAndModify, coll
+                        ,{ _id: _coll }
+                        ,[['_id', 'asc']]
+                        ,{ $inc: { next: 1 }}
+                        ,{
+                            "new": true
+                            ,upsert: true
+                        }
+                    );
+                });
             });
         }
         ;
-    Collection.prototype.insert = function ( obj ) {
-        return this.coll.then( function ( coll ) {
-            return a2p( coll.insert, coll, obj );
-        });
-    };
     Collection.prototype.count = function () {
         return this.coll.then( function ( coll ) {
             return a2p( coll.count, coll );
         });
     };
+    Collection.prototype.insertOne = function ( doc, offset ) {
+        offset = offset || 0;
+        var self = this;
+        return this.coll.then( function ( coll ) {
+            return self.counter.then( function( counter ) {
+                console.log( doc );
+                console.log( offset );
+                console.log( counter );
+                doc['_id'] = counter.next + offset;
+                return a2p( coll.insert, coll, doc );
+            });
+        });
+    };
+
     return function ( _coll ) {
         return cache[ _coll ] || (cache[ _coll ] = new Collection( _coll ));
     };
@@ -91,6 +113,7 @@ var T = (function () {
 
 var pD = M('suckless-info', 'localhost', 27017);
 pD('test').count().then( function ( count ) { console.log( count ); });
+pD('test').counter.then( function ( counter ) { console.log( counter.next - 1 ); });
 
 connect(
     quip()
@@ -112,29 +135,16 @@ urlRules.add({
     '/': function ( req, res, next ) {
         res.renderHtml('./views/index.html');
     }
-    ,'/hello/:visitor': function ( req, res, next, visitor ) {
-        pD('test').insert([{ visitor: visitor }]).then( function ( docs ) {
-            console.log( docs );
-        });
-        pD('test').count().then( function ( count ) {
-            res.text().ok( visitor + ', you are the ' + count + 'th visitor');
-        });
-    }
-    ,'/ok': function ( req, res, next ) {
-        res.ok('ok');
-    }
-    ,'/ok/': switchman.removeSlash
-    ,'/ok/ok': switchman.addSlash
-    ,'/ok//ok/': function ( req, res, next ) {
-        res.ok('okook');
-    }
     ,'/signup': switchman.addSlash
     ,'/signup/': {
         'GET': function ( req, res, next ) {
             res.renderHtml('./views/signup.html');
         }
         ,'POST': function ( req, res, next ) {
-            console.log( req.body );
+            when( pD('user').insertOne( req.body, -1 ), function ( doc ) {
+                console.log( doc );
+            });
+            pD('user').counter.then( function ( doc ) { console.log( doc ); });
             res.redirect('/signup/done/');
         }
         ,'GET done/': function ( req, res, next ) {
