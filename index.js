@@ -9,19 +9,30 @@ var connect = require('connect')
     ,mongodb = require('mongodb')
     ,Db = mongodb.Db
     ,urlRules = switchman()
+    ,__slice = Array.prototype.slice
     ;
 
+function extend( a, b ) {
+    Object.keys( b ).forEach( function ( k ) {
+        a[ k ] = b[ k ];
+    });
+    return a;
+}
+
+function crypt( raw ) {
+    return raw;
+}
+
+
 var a2p = function () {
-    if ( arguments.length < 1 ) {
+    if (arguments.length < 1) {
         return Q.ref( false );
     }
-    var __slice = Array.prototype.slice
-        ,p = Q.defer()
-        ;
+    var p = Q.defer() ;
     arguments[0].apply( arguments[1], __slice.call( arguments, 2 ).concat([ function ( err ) {
-        if ( err ) {
+        if (err) {
             p.reject( err );
-        } else if ( arguments.length > 2 ) {
+        } else if (arguments.length > 2) {
             p.resolve.call( p, __slice.call( arguments, 1 ));
         } else {
             p.resolve.apply( p, __slice.call( arguments, 1 ));
@@ -30,55 +41,59 @@ var a2p = function () {
     return p.promise;
 };
 
-var M = function ( _db_name, _server, _port ) {
+var pD = function ( _db_name, _server, _port ) {
     var _db = new Db( _db_name, new mongodb.Server( _server, 27017 ))
         ,pDb = a2p( _db.open, _db )
         ,cache = {}
-        ,Collection = function ( _coll ) {
-            this.coll = cache[ _coll ] || (cache[ _coll ] = pDb.then( function( db ) {
-                return a2p( db.collection, db, _coll );
-            }));
-            this.counter = pDb.then( function ( db ) {
-                return a2p( db.collection, db, 'counter').then( function ( coll ) {
-                    return a2p( coll.findAndModify, coll
-                        ,{ _id: _coll }
-                        ,[['_id', 'asc']]
-                        ,{ $inc: { next: 1 }}
-                        ,{
-                            "new": true
-                            ,upsert: true
-                        }
-                    );
-                });
-            });
-        }
         ;
-    Collection.prototype.count = function () {
-        return this.coll.then( function ( coll ) {
-            return a2p( coll.count, coll );
-        });
-    };
-    Collection.prototype.insertOne = function ( doc, offset ) {
-        offset = offset || 0;
-        var self = this;
-        return this.coll.then( function ( coll ) {
-            return self.counter.then( function( counter ) {
-                console.log( doc );
-                console.log( offset );
-                console.log( counter );
-                doc['_id'] = counter.next + offset;
-                return a2p( coll.insert, coll, doc );
-            });
-        });
-    };
-
     return function ( _coll ) {
-        return cache[ _coll ] || (cache[ _coll ] = new Collection( _coll ));
+        return cache[ _coll ] || (cache[ _coll ] = (function ( pColl ) {
+            return function ( action ) {
+                if (arguments.length < 1) {
+                    throw new Error('at least one argument');
+                }
+                var args = __slice.call( arguments );
+                return pColl.then( function ( coll ) {
+                    var offset
+                        ,doc
+                        ,fmArgs = [
+                            coll.findAndModify
+                            ,coll
+                            ,{ _id: 'counter' }
+                            ,[['_id', 'asc']]
+                            ,{ $inc: { next: 1 }}
+                            ,{
+                                'new': true
+                                ,upsert: true
+                            }
+                        ]
+                        ;
+                    if (action == 'insertOne') {
+                        doc = args[1];
+                        offset = args[2] || 0;
+                        return a2p.apply( null, fmArgs ).then( function ( counter ) {
+                            doc.id = counter.next + offset;
+                            return a2p( coll.insert, coll, doc );
+                        });
+                    }
+                    if (action == 'counter') {
+                        args = fmArgs;
+                    } else {
+                        args.splice( 0, 1, coll[ action ], coll);
+                    }
+                    return a2p.apply( null, args );
+                });
+            };
+        }( pDb.then( function ( db ) {
+            return a2p( db.collection, db, _coll );
+        }) )));
     };
 }
 
+
 var S = {}; // global settings
 S.debug = true;
+S.secret = 'suckless.info';
 
 var T = (function () {
     var cache = {};
@@ -86,7 +101,7 @@ var T = (function () {
         var pTemplate = cache[ path ]
             ,dTemplate
             ;
-        if ( S.debug || !pTemplate ) {
+        if (S.debug || !pTemplate) {
             dTemplate = Q.defer();
             pTemplate = cache[ path ] = dTemplate.promise;
             when( FS.read( path, { charset: 'utf-8' }), function ( rawTemplate ){
@@ -111,9 +126,9 @@ var T = (function () {
     };
 }());
 
-var pD = M('suckless-info', 'localhost', 27017);
-pD('test').count().then( function ( count ) { console.log( count ); });
-pD('test').counter.then( function ( counter ) { console.log( counter.next - 1 ); });
+var M = pD('suckless-info', 'localhost', 27017);
+M('user')('count').then( function ( count ) { console.log( count ); });
+//M('test').counter.then( function ( counter ) { console.log( counter.next - 1 ); });
 
 connect(
     quip()
@@ -128,27 +143,60 @@ connect(
         next();
     }
     ,connect.bodyParser()
+    ,connect.cookieParser()
+    ,connect.session({ secret: S.secret })
     ,urlRules
 ).listen(10086);
 
 urlRules.add({
     '/': function ( req, res, next ) {
-        res.renderHtml('./views/index.html');
+        var u = req.session && req.session.u || '欢迎光临，请<a href="/signin/">登入或注册</a>';
+        res.renderHtml('./views/index.html', { username: u });
     }
-    ,'/signup': switchman.addSlash
-    ,'/signup/': {
+});
+
+function redirectToSignin( req, res, next ) {
+    res.redirect('/signin/');
+}
+urlRules.add({
+    '/signin': switchman.addSlash
+    ,'/signin/': {
         'GET': function ( req, res, next ) {
-            res.renderHtml('./views/signup.html');
+            res.renderHtml('./views/signin.html');
         }
         ,'POST': function ( req, res, next ) {
-            when( pD('user').insertOne( req.body, -1 ), function ( doc ) {
-                console.log( doc );
-            });
-            pD('user').counter.then( function ( doc ) { console.log( doc ); });
-            res.redirect('/signup/done/');
+            var reqBody = extend({}, req.body);
+            if ( reqBody.action == '注册' ) {
+                delete reqBody.password_confirm;
+                delete reqBody.action;
+                reqBody.password = crypt( reqBody.password );
+                when( M('user')('insertOne', reqBody, -1 ), function ( doc ) {
+                    console.log( doc );
+                });
+                res.redirect('/signin/done/');
+            } else {
+                if ( reqBody.action == '登入' ) {
+                }
+                M('user')('findOne', {
+                    username: reqBody.username
+                    ,password: crypt( reqBody.password )
+                }).then( function ( doc ) {
+                    console.log( doc );
+                    req.session.user = doc;
+                    res.redirect('/signin/done/');
+                }).then( function ( err ) {
+                    res.html().ok( err );
+                });
+            }
         }
         ,'GET done/': function ( req, res, next ) {
-            res.ok().html('注册成功');
+            req.session.c = req.session.c && req.session.c + 1 || 1;
+            res.html().ok( JSON.stringify( req.session.user ));
+            //res.ok().html(req.session.c + '注册成功');
         }
     }
+    ,'GET /signup/': redirectToSignin
+    ,'GET /register/': redirectToSignin
+    ,'GET /reg/': redirectToSignin
+    ,'GET /login/': redirectToSignin
 });
