@@ -20,7 +20,7 @@ module.exports = {
                 delete reqBody.password_confirm;
                 delete reqBody.action;
                 reqBody.password = U.crypt( S.secret + reqBody.username + reqBody.password );
-                M('user').p('insertOne', reqBody, -1 ).then( function ( doc ) {
+                M('user').p('insertOne', reqBody ).then( function ( doc ) {
                     console.log( doc );
                 });
                 res.redirect('/account/registered/');

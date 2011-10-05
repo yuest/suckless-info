@@ -12,7 +12,6 @@ var connect = require('connect')
     ;
 
 var M = Model( S.db );
-M('user').p('count')( function ( count ) { console.log( count ); });
 
 var T = (function () {
     var cache = {};
@@ -65,8 +64,32 @@ connect(
 
 urlRules.add({
     '/': function ( req, res, next ) {
-        var u = req.session && req.session.user && JSON.stringify( req.session.user) || '欢迎光临，请<a href="/signin/">登入或注册</a>';
-        res.renderHtml('./views/index.html', { username: u });
+        M('post').find({ tag: 'trivial' }, { _id:1, author:1, topic:1, content:1 }, 0, 20).toArray( function ( err, topics ) {
+            res.renderHtml('./views/index.html', { topics: topics });
+        });
+    }
+    ,'/post/new': switchman.addSlash
+    ,'/post/new/': {
+        'GET': function ( req, res, next ) {
+            res.renderHtml('./views/post-new.html' );
+        }
+        ,'POST': function ( req, res, next ) {
+            var reqBody = U.extend( {}, req.body );
+            reqBody.tag = 'trivial';
+            if (req.session.user) {
+                reqBody.author = req.session.user.username;
+            }
+            M('post').p( 'insertOne', reqBody ).then( function ( docs ) {
+                console.log( docs );
+                res.redirect('/post/' + docs[0]._id + '/');
+            });
+        }
+    }
+    ,'GET /post/:id': switchman.addSlash
+    ,'GET /post/:id/': function ( req, res, next, id ) {
+        M('post').findOne({ _id: parseInt( id )}, function ( err, doc ) {
+            res.html().ok( JSON.stringify( doc ));
+        });
     }
 });
 

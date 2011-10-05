@@ -2,10 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title></title>
+    <title>Suckless.info</title>
 </head>
 <body>
-    Hello, World!
-    {{=it.u}}
+    <a href="/post/new/">发贴</a>
+    {{ var i, l = it.topics.length ; for ( i = 0; i < l; i++ ) { }}
+    <a href="/post/{{=it.topics[i]._id}}/">{{=it.topics[i].topic}}</a> by
+    <a href="/who/{{=it.topics[i].author}}/">{{=it.topics[i].author}}</a>:
+    {{=it.topics[i].content}}<br>
+    {{ } }}
 </body>
 </html>
