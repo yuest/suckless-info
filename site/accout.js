@@ -1,5 +1,8 @@
 var switchman = require('switchman')
     ,U = require('../lib/utils')
+    ,S = require('../settings')
+    ,Model = require('../lib/model')
+    ,M = Model( S.db )
     ;
 function redirectToSignin( req, res, next ) {
     res.redirect('/account/');

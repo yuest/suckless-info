@@ -2,22 +2,17 @@ var connect = require('connect')
     ,connectStatic = connect['static']
     ,switchman = require('switchman')
     ,quip = require('quip')
+    ,fs = require('fs')
     ,dot = require('dot')
-    ,FS = require('q-fs')
     ,util = require('util')
     ,urlRules = switchman()
     ,U = require('./lib/utils')
+    ,S = require('./settings')
     ,Model = require('./lib/model')
     ;
 
-
-var M = Model('localhost:27017/suckless-info?auto_reconnect');
+var M = Model( S.db );
 M('user').p('count')( function ( count ) { console.log( count ); });
-
-
-var S = {}; // global settings
-S.debug = true;
-S.secret = 'suckless.info';
 
 var T = (function () {
     var cache = {};
@@ -28,7 +23,7 @@ var T = (function () {
         if (S.debug || !pTemplate) {
             dTemplate = U.deferred();
             pTemplate = cache[ path ] = dTemplate.promise;
-            FS.read( path, { charset: 'utf-8' }).then( function ( rawTemplate ){
+            U.a2p( fs.readFile, fs, path, 'utf-8').then( function ( rawTemplate ){
                 dTemplate.resolve( dot.template( rawTemplate ));
             }, function ( err ) {
                 dTemplate.reject('error while loading '+ path + ': ' + err );
