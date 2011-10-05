@@ -4,60 +4,15 @@ var connect = require('connect')
     ,quip = require('quip')
     ,dot = require('dot')
     ,FS = require('q-fs')
-    ,mongodb = require('mongodb')
-    ,Db = mongodb.Db
-    ,U = require('./utils')
-    ,mongo = require('mongoskin')
     ,util = require('util')
     ,urlRules = switchman()
+    ,U = require('./lib/utils')
+    ,Model = require('./lib/model')
     ;
 
-var db = mongo.db('localhost:27017/suckless-info?auto_reconnect');
-var Model = function( db ) {
-    db = (typeof db == 'string') ? mongo.db( db ) : db;
-    var collection = function ( _coll ) {
-        var coll = db.collection( _coll );
-        coll.p = function ( action ) { // 以 promise 的方式调用 collection 方法
-            if (arguments.length < 1) {
-                throw new Error('at least one argument');
-            }
-            var args = U.slice.call( arguments )
-                ,offset
-                ,doc
-                ,fmArgs = [
-                    coll.findAndModify
-                    ,coll
-                    ,{ _id: 'counter' }
-                    ,[['_id', 'asc']]
-                    ,{ $inc: { next: 1 }}
-                    ,{
-                        'new': true
-                        ,upsert: true
-                    }
-                ]
-                ;
-            if (action == 'insertOne') {
-                doc = args[1];
-                offset = args[2] || 0;
-                return U.a2p.apply( null, fmArgs ).then( function ( counter ) {
-                    doc.id = counter.next + offset;
-                    return U.a2p( coll.insert, coll, doc );
-                });
-            }
-            if (action == 'counter') {
-                args = fmArgs;
-            } else {
-                args.splice( 0, 1, coll[ action ], coll);
-            }
-            return U.a2p.apply( null, args );
-        };
-    };
-    collection.db = db;
-    return collection;
-}
 
 var M = Model('localhost:27017/suckless-info?auto_reconnect');
-M('user')('count')( function ( count ) { console.log( count ); });
+M('user').p('count')( function ( count ) { console.log( count ); });
 
 
 var S = {}; // global settings
