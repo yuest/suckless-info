@@ -82,10 +82,14 @@ var pD = function ( _db_name, _server, _port ) {
                         args.splice( 0, 1, coll[ action ], coll);
                     }
                     return a2p.apply( null, args );
+                }, function ( err ) {
+                    console.log( err );
                 });
             };
         }( pDb.then( function ( db ) {
             return a2p( db.collection, db, _coll );
+        }, function ( err ) {
+            console.log( err );
         }) )));
     };
 }
@@ -156,11 +160,11 @@ urlRules.add({
 });
 
 function redirectToSignin( req, res, next ) {
-    res.redirect('/signin/');
+    res.redirect('/account/');
 }
 urlRules.add({
-    '/signin': switchman.addSlash
-    ,'/signin/': {
+    '/account': switchman.addSlash
+    ,'/account/': {
         'GET': function ( req, res, next ) {
             res.renderHtml('./views/signin.html');
         }
@@ -183,20 +187,27 @@ urlRules.add({
                 }).then( function ( doc ) {
                     console.log( doc );
                     req.session.user = doc;
-                    res.redirect('/signin/done/');
+                    res.redirect('/account/registered/');
                 }).then( function ( err ) {
-                    res.html().ok( err );
+                    console.log( err );
+                    res.html().ok( 'error' );
                 });
             }
         }
-        ,'GET done/': function ( req, res, next ) {
+        ,'GET registered/': function ( req, res, next ) {
             req.session.c = req.session.c && req.session.c + 1 || 1;
             res.html().ok( JSON.stringify( req.session.user ));
             //res.ok().html(req.session.c + '注册成功');
         }
     }
+    ,'GET /signin': redirectToSignin
+    ,'GET /signin/': redirectToSignin
+    ,'GET /signup': redirectToSignin
     ,'GET /signup/': redirectToSignin
+    ,'GET /register': redirectToSignin
     ,'GET /register/': redirectToSignin
+    ,'GET /reg': redirectToSignin
     ,'GET /reg/': redirectToSignin
+    ,'GET /login': redirectToSignin
     ,'GET /login/': redirectToSignin
 });
