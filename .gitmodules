@@ -4,3 +4,6 @@
 [submodule "static/skeleton"]
 	path = static/skeleton
 	url = https://github.com/dhgamache/Skeleton.git
+[submodule "tools/djs"]
+	path = tools/djs
+	url = https://github.com/louisremi/node-DJs.git
